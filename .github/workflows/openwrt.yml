@@ -1,0 +1,52 @@
+name: CI-OpenWrt
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: build-dep
+      run: |
+        sudo apt -y update
+        sudo apt -y install subversion g++ zlib1g-dev build-essential git python python3 python3-distutils libncurses5-dev gawk gettext unzip file libssl-dev wget libelf-dev ecj fastjar java-propose-classpath
+
+    - name: cleanup
+      run: |
+        sudo apt clean
+        sudo swapoff -a
+        sudo rm -f /swapfile
+        docker rmi $(docker image ls -aq)
+        df -h
+
+    - name: fetch
+      run: |
+        git clone https://github.com/openwrt/openwrt
+        cd openwrt
+        git checkout v19.07.2
+
+    - name: feeds
+      run: |
+        cd openwrt
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+ 
+    - name: compile
+      run: |
+        cd openwrt
+        echo -e 'CONFIG_TARGET_ath79=y\nCONFIG_TARGET_ath79_generic=y\nCONFIG_TARGET_ath79_generic_DEVICE_netgear_wndr3800=y\nCONFIG_PACKAGE_luci=y\nCONFIG_LUCI_LANG_zh_Hans=y' > .config
+        make -j`nproc`
+        cp .config bin/_config
+
+    - name: upload
+      uses: actions/upload-artifact@v2
+      with:
+        name: build
+        path: ./openwrt/bin
